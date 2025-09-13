@@ -1,0 +1,52 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*' # Trigger on tags that start with 'v', e.g., v1.0.0
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # This is required for creating releases
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+      
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v3
+      with:
+        dotnet-version: '8.0.x'
+        
+    - name: Restore dependencies
+      run: dotnet restore ./ChatRelay.csproj
+      
+    - name: Build
+      run: dotnet build ./ChatRelay.csproj --configuration Release --no-restore
+      
+    - name: Get version from tag
+      id: get_version
+      run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_ENV
+      
+    - name: Create plugin package
+      run: |
+        mkdir -p release/addons/counterstrikesharp/plugins/ChatRelay
+        echo "Copying plugin DLLs from bin/Release/net8.0/ChatRelay..."
+        cp -f ./bin/Release/net8.0/ChatRelay/*.dll release/addons/counterstrikesharp/plugins/ChatRelay/ || (echo "No DLLs found" && exit 1)
+        cp -f README.md release/addons/counterstrikesharp/plugins/ChatRelay/ || echo "README not found"
+        cd release
+        zip -r ChatRelay-${{ env.VERSION }}.zip addons/
+      
+    - name: Create Release
+      id: create_release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: release/ChatRelay-${{ env.VERSION }}.zip
+        name: Release ${{ env.VERSION }}
+        draft: false
+        prerelease: false
+        generate_release_notes: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -25,6 +25,11 @@ public class ChatRelayConfig : BasePluginConfig
 
     // Preferred for typical CS2 plugin configs: a single webhook/url to post to
     [JsonPropertyName("WebhookUrl")] public string WebhookUrl { get; set; } = "";
+
+    [JsonPropertyName("DebugLogs")] public bool DebugLogs { get; set; } = true;
+
+    // When true, treat WebhookUrl as a Discord Webhook and send Discord-compatible payloads.
+    [JsonPropertyName("DiscordWebhook")] public bool DiscordWebhook { get; set; } = false;
 }
 
 [MinimumApiVersion(338)]
@@ -33,7 +38,7 @@ public class ChatRelay : BasePlugin, IPluginConfig<ChatRelayConfig>
     public override string ModuleName => "ChatRelay";
     public override string ModuleDescription => "Relay chat messages from your CS2 server to API";
     public override string ModuleAuthor => "AGA";
-    public override string ModuleVersion => "1.0";
+    public override string ModuleVersion => "1.0.0";
 
     public ChatRelayConfig Config { get; set; } = new();
 
@@ -43,7 +48,7 @@ public class ChatRelay : BasePlugin, IPluginConfig<ChatRelayConfig>
     }
     public override void Load(bool hotReload)
     {
-        Logger.LogInformation($"loaded successfully! (Version {ModuleVersion})");
+        LogInfo($"loaded successfully! (Version {ModuleVersion})");
         // Ensure a config file exists at the requested location on first load
         EnsureConfigFile();
         RegisterEventHandler<EventPlayerChat>(OnEventPlayerChat);
@@ -97,7 +102,7 @@ public class ChatRelay : BasePlugin, IPluginConfig<ChatRelayConfig>
         // Normalize SteamID to 64-bit community ID. Some servers provide AccountID (32-bit)
         // which needs base offset added.
         var steam64 = ToSteam64(player.SteamID);
-        Logger.LogInformation($"ChatRelay: normalized SteamID64 for {player.PlayerName}: {steam64}");
+        LogInfo($"ChatRelay: normalized SteamID64 for {player.PlayerName}: {steam64}");
         _ = SendApiMessage(player.PlayerName, @event.Text, playerteam, steam64);
         return HookResult.Continue;
     }
@@ -110,13 +115,27 @@ public class ChatRelay : BasePlugin, IPluginConfig<ChatRelayConfig>
         // Guard: require an endpoint to be configured
         if (string.IsNullOrWhiteSpace(endpoint))
         {
-            Logger.LogInformation("ChatRelay: No WebhookUrl/ApiUrl configured; skipping sending message to API.");
+            LogInfo("ChatRelay: No WebhookUrl/ApiUrl configured; skipping sending message to API.");
             return;
         }
 
         using (var httpClient = new HttpClient())
         {
-            // Optional auth header
+            if (Config.DiscordWebhook)
+            {
+                // Discord mode: ignore custom auth headers and send Discord-compatible JSON (embed)
+                var discordPayload = DiscordSender.BuildChatEmbed(playerName, msg, playerteam, steamID.ToString(), "ChatRelay");
+                var discordJson = Newtonsoft.Json.JsonConvert.SerializeObject(discordPayload);
+                var discordContent = new StringContent(discordJson, Encoding.UTF8, "application/json");
+                var discordResponse = await httpClient.PostAsync(endpoint, discordContent);
+                if (!discordResponse.IsSuccessStatusCode)
+                {
+                    LogInfo($"Discord webhook error: {discordResponse.StatusCode}");
+                }
+                return;
+            }
+
+            // Generic mode: optional auth header
             if (!string.IsNullOrWhiteSpace(Config.ApiAuthHeaderName))
             {
                 try
@@ -147,7 +166,7 @@ public class ChatRelay : BasePlugin, IPluginConfig<ChatRelayConfig>
 
             if (!response.IsSuccessStatusCode)
             {
-                Logger.LogInformation($"Error while sending message to API! code: {response.StatusCode}");
+                LogInfo($"Error while sending message to API! code: {response.StatusCode}");
             }
         }
     }
@@ -202,12 +221,41 @@ public class ChatRelay : BasePlugin, IPluginConfig<ChatRelayConfig>
             };
             var json = JsonSerializer.Serialize(Config, options);
             File.WriteAllText(configPath, json, Encoding.UTF8);
-            Logger.LogInformation($"ChatRelay: Created default config at {configPath}");
+            LogInfo($"ChatRelay: Created default config at {configPath}");
         }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "ChatRelay: Failed to create default config file");
+            LogError(ex, "ChatRelay: Failed to create default config file");
         }
     }
 
+    private void LogInfo(string message)
+    {
+        try
+        {
+            if (Config?.DebugLogs == true)
+            {
+                Logger.LogInformation(message);
+            }
+        }
+        catch
+        {
+            // ignore logging failures
+        }
+    }
+
+    private void LogError(Exception ex, string message)
+    {
+        try
+        {
+            if (Config?.DebugLogs == true)
+            {
+                Logger.LogError(ex, message);
+            }
+        }
+        catch
+        {
+            // ignore logging failures
+        }
+    }
 }

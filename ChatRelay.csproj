@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>ChatRelay</AssemblyName>
+
+    <!-- Enable copying referenced assemblies -->
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CounterStrikeSharp.API" Version="1.0.338" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+  </ItemGroup>
+
+  <!-- Copy only what you want into a clean folder -->
+  <Target Name="PostBuild_CopyPlugin" AfterTargets="Build">
+    <PropertyGroup>
+      <PluginOutDir>$(OutputPath)ChatRelay\</PluginOutDir>
+    </PropertyGroup>
+
+    <ItemGroup>
+      <!-- Always include your plugin DLL -->
+      <PluginFiles Include="$(TargetDir)$(AssemblyName).dll" />
+
+      <!-- Always include Newtonsoft.Json.dll -->
+      <PluginFiles Include="$(TargetDir)Newtonsoft.Json.dll" />
+    </ItemGroup>
+
+    <MakeDir Directories="$(PluginOutDir)" />
+    <Copy SourceFiles="@(PluginFiles)"
+          DestinationFolder="$(PluginOutDir)"
+          SkipUnchangedFiles="true" />
+  </Target>
+
+</Project>

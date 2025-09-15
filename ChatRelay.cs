@@ -66,15 +66,20 @@ public class ChatRelay : BasePlugin, IPluginConfig<ChatRelayConfig>
         if (player == null || !player.IsValid ||  @event.Text == null)
             return HookResult.Continue;
 
+        // Trim and ignore empty/whitespace-only chat events (happens when player opens chat and presses Enter to close)
+        var text = @event.Text.Trim();
+        if (string.IsNullOrWhiteSpace(text))
+            return HookResult.Continue;
+
         if (Config.IgnoreCommands)
         {
-            if (@event.Text.Contains('!') || @event.Text.Contains('/'))
+            if (text.Contains('!') || text.Contains('/'))
                 return HookResult.Continue;
         }
 
         if (Config.OnlyShowCommands)
         {
-            if (!@event.Text.Contains('!') && !@event.Text.Contains('/'))
+            if (!text.Contains('!') && !text.Contains('/'))
                 return HookResult.Continue;
         }
 
@@ -103,12 +108,18 @@ public class ChatRelay : BasePlugin, IPluginConfig<ChatRelayConfig>
         // which needs base offset added.
         var steam64 = ToSteam64(player.SteamID);
         LogInfo($"ChatRelay: normalized SteamID64 for {player.PlayerName}: {steam64}");
-        _ = SendApiMessage(player.PlayerName, @event.Text, playerteam, steam64);
+        _ = SendApiMessage(player.PlayerName, text, playerteam, steam64);
         return HookResult.Continue;
     }
 
     public async Task SendApiMessage(string playerName, string msg, string playerteam, ulong steamID)
     {
+        // Defensive: do not send empty/whitespace-only messages
+        if (string.IsNullOrWhiteSpace(msg))
+        {
+            return;
+        }
+
         // Determine endpoint: prefer WebhookUrl, fallback to ApiUrl (backward compatibility)
         var endpoint = string.IsNullOrWhiteSpace(Config.WebhookUrl) ? Config.ApiUrl : Config.WebhookUrl;
 

@@ -38,7 +38,7 @@ public class ChatRelay : BasePlugin, IPluginConfig<ChatRelayConfig>
     public override string ModuleName => "ChatRelay";
     public override string ModuleDescription => "Relay chat messages from your CS2 server to API";
     public override string ModuleAuthor => "AGA";
-    public override string ModuleVersion => "1.0.0";
+    public override string ModuleVersion => "1.2.0";
 
     public ChatRelayConfig Config { get; set; } = new();
 
